@@ -2,8 +2,15 @@ const { withPodfile } = require('@expo/config-plugins');
 
 module.exports = function withFluidAudio(config) {
   return withPodfile(config, (mod) => {
-    const contents = mod.modResults.contents;
-    if (contents.includes("pod 'FluidAudio'")) return mod;
+    let contents = mod.modResults.contents;
+    // AppleFoundationTranslator imports FoundationModels and therefore needs iOS 26.
+    // Expo's generated Podfile can otherwise retain its default 15.1 platform even
+    // when app.json declares a newer deployment target, causing CocoaPods to skip it.
+    contents = contents.replace(/^platform :ios,.*$/m, "platform :ios, '26.0'");
+    if (contents.includes("pod 'FluidAudio'")) {
+      mod.modResults.contents = contents;
+      return mod;
+    }
 
     const targetLine = contents.match(/^target ['"][^'"]+['"] do\s*$/m);
     if (!targetLine || targetLine.index == null) {
