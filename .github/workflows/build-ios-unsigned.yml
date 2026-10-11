@@ -66,6 +66,30 @@ jobs:
           echo "=== Install CocoaPods with verbose output ==="
           cd ios
           pod install --verbose
+      
+      - name: Diagnose missing AppleFoundationTranslator
+        if: always()
+        run: |
+          echo "=== package.json autolinking config ==="
+          node -e "console.log(JSON.stringify(require('./package.json').expo?.autolinking, null, 2))"
+
+          echo "=== Expo module search ==="
+          npx expo-modules-autolinking search
+
+          echo "=== Expo Apple resolution ==="
+          npx expo-modules-autolinking resolve --platform apple
+
+          echo "=== Generated Podfile autolinking lines ==="
+          grep -n -E 'use_expo_modules|autolink|AppleFoundationTranslator|VoiceCache' ios/Podfile || true
+
+          echo "=== Translator podspec ==="
+          cat modules/AppleFoundationTranslator/ios/AppleFoundationTranslator.podspec
+
+          echo "=== Translator module files ==="
+          find modules/AppleFoundationTranslator -maxdepth 4 -type f -print | sort
+
+          echo "=== CocoaPods references ==="
+          grep -R -n 'AppleFoundationTranslator' ios/Podfile ios/Pods/Manifest.lock ios/Pods/Local\ Podspecs 2>/dev/null || true
 
       - name: Verify native modules are linked into iOS
         run: |
