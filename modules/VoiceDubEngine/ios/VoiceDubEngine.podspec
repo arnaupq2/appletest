@@ -6,7 +6,7 @@ Pod::Spec.new do |s|
   s.author = 'VoiceDubAI'
   s.homepage = 'https://github.com/arnaupq2/appletest'
   s.license = { :type => 'MIT' }
-  s.platforms = { :ios => '17.0' }
+  s.platforms = { :ios => '26.0' }
   s.source = { :git => 'https://github.com/arnaupq2/appletest.git', :tag => s.version.to_s }
   s.static_framework = true
   s.dependency 'ExpoModulesCore'
