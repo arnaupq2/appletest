@@ -99,6 +99,10 @@ function AppScreen() {
   const [voiceRecording, setVoiceRecording] = useState(false);
   const [voiceProcessing, setVoiceProcessing] = useState(false);
   const [voiceProfileReady, setVoiceProfileReady] = useState(false);
+  const [movieCapturing, setMovieCapturing] = useState(false);
+  const [movieProcessing, setMovieProcessing] = useState(false);
+  const [movieSegments, setMovieSegments] = useState([]);
+  const [movieSpeakers, setMovieSpeakers] = useState([]);
   const contextRef = useRef(null);
   const busyRef = useRef(false);
   const lastFinalRef = useRef('');
@@ -208,6 +212,54 @@ function AppScreen() {
   }
   function stopListening() { try { ExpoSpeechRecognitionModule.stop(); } catch (_) {} Speech.stop(); setListening(false); setStatus('Escucha detenida'); }
 
+  async function startAutomaticMovieCapture() {
+    try {
+      if (!VoiceDubEngine?.startMovieCapture || !VoiceDubEngine?.stopMovieCaptureAndDub) {
+        throw new Error('El motor de doblaje automático no está incluido en este IPA. Espera a que termine la compilación de main e instala el nuevo IPA.');
+      }
+      if (listening) stopListening();
+      setError('');
+      setMovieSegments([]);
+      setMovieSpeakers([]);
+      setSourceText('');
+      setTranslatedText('');
+      await VoiceDubEngine.startMovieCapture();
+      setMovieCapturing(true);
+      setStatus('Modo película activo: escuchando el audio que sale por el televisor u otro dispositivo.');
+    } catch (e) {
+      setError(String(e?.message || e));
+      setStatus('No se pudo iniciar el modo película');
+    }
+  }
+
+  async function stopAutomaticMovieCapture() {
+    try {
+      setMovieCapturing(false);
+      setMovieProcessing(true);
+      setError('');
+      setStatus('Analizando voces, identificando interlocutores y preparando el doblaje local…');
+      const result = await VoiceDubEngine.stopMovieCaptureAndDub(sourceLanguage, targetLanguage);
+      const segments = Array.isArray(result?.segments) ? result.segments : [];
+      const profiles = result?.profileBase64BySpeaker || {};
+      for (const [profileName, profileBase64] of Object.entries(profiles)) {
+        if (profileBase64) await VoiceCache.storeVoiceAsset(profileName, profileBase64);
+      }
+      setMovieSegments(segments);
+      setMovieSpeakers(Array.isArray(result?.speakers) ? result.speakers : []);
+      setSourceText(segments.map(item => item.source).filter(Boolean).join(' '));
+      setTranslatedText(segments.map(item => item.translation).filter(Boolean).join(' '));
+      await refreshVoiceCache();
+      setStatus(segments.length
+        ? `Doblaje creado: ${segments.length} frases · ${(result?.speakers || []).length} interlocutores detectados.`
+        : 'No se encontraron frases que se pudieran doblar.');
+    } catch (e) {
+      setError(String(e?.message || e));
+      setStatus('No se pudo completar el doblaje automático');
+    } finally {
+      setMovieProcessing(false);
+    }
+  }
+
   async function startVoiceRecording() {
     try {
       if (!VoiceDubEngine?.startVoiceSampleRecording) throw new Error('El motor VoiceDubEngine no está incluido en esta compilación de iOS. Vuelve a compilar el IPA desde la rama de pruebas.');
@@ -295,10 +347,22 @@ function AppScreen() {
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryText}>Traducir  ↗</Text>}
         </Pressable>
       </GlassCard> : <GlassCard style={s.contentCard}>
-        <View style={s.rowBetween}><Text style={s.sectionTitle}>Diálogo en directo</Text><View style={[s.liveDot, listening && s.liveDotOn]} /><Text style={s.liveLabel}>{listening ? 'EN DIRECTO' : 'MICRÓFONO'}</Text></View>
-        <Text style={s.transcript}>{sourceText || 'El diálogo reconocido aparecerá aquí.'}</Text>
-        <Pressable disabled={busy} style={[s.primaryButton, listening && s.stopButton, busy && s.disabled]} onPress={listening ? stopListening : startListening}><Text style={s.primaryText}>{listening ? '■  Detener escucha' : '◉  Escuchar y traducir'}</Text></Pressable>
-        <Text style={s.footnote}>El modo películas escucha por el micrófono; iOS no permite capturar directamente el audio interno de otras aplicaciones. Para obtener mejores resultados, usa otro dispositivo o altavoces.</Text>
+        <View style={s.rowBetween}><Text style={s.sectionTitle}>Modo película automático</Text><View style={[s.liveDot, movieCapturing && s.liveDotOn]} /><Text style={s.liveLabel}>{movieCapturing ? 'ESCUCHANDO' : movieProcessing ? 'PROCESANDO' : 'LISTO'}</Text></View>
+        <Text style={s.voiceBody}>Pon la película en el televisor, ordenador u otro dispositivo y deja el iPhone cerca del altavoz. VoiceDubAI grabará el sonido ambiente, separará los interlocutores, traducirá cada frase y generará el doblaje con una voz clonada por persona.</Text>
+        <Pressable disabled={movieProcessing} style={[s.primaryButton, (movieProcessing || voiceProcessing) && s.disabled, movieCapturing && s.stopButton]} onPress={movieCapturing ? stopAutomaticMovieCapture : startAutomaticMovieCapture}>
+          {movieProcessing ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryText}>{movieCapturing ? '■  Detener y doblar película' : '◉  Empezar a escuchar película'}</Text>}
+        </Pressable>
+        {movieCapturing && <Text style={s.footnote}>La captura está activa. Deja reproducir la escena y toca detener cuando quieras generar el doblaje.</Text>}
+        {movieProcessing && <Text style={s.footnote}>La primera ejecución puede tardar más porque descarga los modelos locales de reconocimiento y diarización. Después se reutiliza la caché.</Text>}
+        {!!movieSpeakers.length && <View style={s.cacheRow}><Text style={s.cacheLabel}>Interlocutores detectados</Text><Text style={s.cacheValue}>{movieSpeakers.join(' · ')}</Text></View>}
+        {!!movieSegments.length && <View style={{ marginTop: 12 }}>
+          {movieSegments.map((item, index) => <View key={`${item.speaker}-${item.startSeconds}-${index}`} style={{ paddingVertical: 9, borderTopWidth: 1, borderTopColor: 'rgba(120,120,128,0.15)' }}>
+            <Text style={s.cacheLabel}>{item.speaker} · {Math.floor(item.startSeconds || 0)}s</Text>
+            <Text style={{ color: '#6E6E73', fontSize: 12, lineHeight: 17, marginTop: 3 }}>{item.source}</Text>
+            <Text style={{ color: '#1C1C1E', fontSize: 14, lineHeight: 20, marginTop: 4 }}>{item.translation}</Text>
+          </View>)}
+        </View>}
+        <Text style={s.footnote}>Importante: iOS no permite capturar directamente el audio interno de Netflix u otras apps. Este modo escucha el televisor/altavoz con el micrófono y, en esta versión, procesa y reproduce el doblaje al detener la captura; no sustituye el audio original en tiempo real. La voz sale por la ruta de audio activa, incluidos los AirPods si están conectados.</Text>
       </GlassCard>}
 
       <GlassCard style={s.outputCard}>
