@@ -20,6 +20,14 @@
     },
     "plugins": [
       [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "26.0"
+          }
+        }
+      ],
+      [
         "expo-speech-recognition",
         {
           "microphonePermission": "VoiceDubAI necesita el micrófono para traducir diálogos.",
