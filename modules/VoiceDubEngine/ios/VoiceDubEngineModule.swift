@@ -117,7 +117,8 @@ public class VoiceDubEngineModule: Module {
         try await self.exportAudioClip(source: recordingURL, destination: clipURL, start: start, end: end)
         defer { try? FileManager.default.removeItem(at: clipURL) }
 
-        let transcription = try await asr.transcribe(clipURL, source: .system)
+        var decoderState = TdtDecoderState.make()
+        let transcription = try await asr.transcribe(clipURL, decoderState: &decoderState)
         let sourceText = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !sourceText.isEmpty else { continue }
 
