@@ -2,6 +2,8 @@ name: Build VoiceDubAI iOS IPA
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [ main, master ]
   push:
     branches: [ main, master ]
 
@@ -29,6 +31,12 @@ jobs:
             "modules/VoiceCache/expo-module.config.json"
             "modules/VoiceCache/ios/VoiceCacheModule.swift"
             "modules/VoiceCache/ios/VoiceCache.podspec"
+            "modules/VoiceDubEngine/package.json"
+            "modules/VoiceDubEngine/index.js"
+            "modules/VoiceDubEngine/expo-module.config.json"
+            "modules/VoiceDubEngine/ios/VoiceDubEngineModule.swift"
+            "modules/VoiceDubEngine/ios/VoiceDubEngine.podspec"
+            "plugins/with-fluid-audio.js"
           )
           missing=0
           for file in "${required_files[@]}"; do
@@ -108,7 +116,17 @@ jobs:
             exit 1
           }
 
-          echo "Ambos módulos están presentes en CocoaPods."
+          test -f "ios/Pods/Local Podspecs/VoiceDubEngine.podspec.json" || {
+            echo "::error::VoiceDubEngine no aparece en CocoaPods."
+            exit 1
+          }
+
+          grep -q 'FluidAudio' "ios/Pods/Local Podspecs/VoiceDubEngine.podspec.json" || {
+            echo "::error::VoiceDubEngine no declara FluidAudio."
+            exit 1
+          }
+
+          echo "Los módulos nativos y FluidAudio están presentes en CocoaPods."
       - name: Build unsigned app
         run: |
           xcodebuild \
