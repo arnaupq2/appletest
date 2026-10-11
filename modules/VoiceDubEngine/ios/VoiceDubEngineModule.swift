@@ -56,10 +56,10 @@ public class VoiceDubEngineModule: Module {
       guard let audioRecorder = self.recorder, let url = self.activeRecordingURL else {
         throw self.error(22, "No hay ninguna muestra de voz grabándose.")
       }
+      let duration = audioRecorder.currentTime
       audioRecorder.stop()
       self.recorder = nil
       self.activeRecordingURL = nil
-      let duration = audioRecorder.currentTime
       guard duration >= 1 else {
         try? FileManager.default.removeItem(at: url)
         throw self.error(23, "Graba al menos 1 segundo; lo recomendable son entre 5 y 15 segundos de una sola persona.")
@@ -69,6 +69,10 @@ public class VoiceDubEngineModule: Module {
 
     AsyncFunction("cloneVoiceFromFile") { (audioUri: String) async throws -> [String: Any] in
       let sourceURL = self.fileURL(from: audioUri)
+      let isAppRecordedSample = sourceURL.path.contains("/VoiceDubAI/VoiceSamples/")
+      defer {
+        if isAppRecordedSample { try? FileManager.default.removeItem(at: sourceURL) }
+      }
       guard FileManager.default.fileExists(atPath: sourceURL.path) else {
         throw self.error(10, "No se encuentra el archivo de audio seleccionado.")
       }
