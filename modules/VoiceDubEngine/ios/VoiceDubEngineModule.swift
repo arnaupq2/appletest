@@ -26,7 +26,7 @@ public class VoiceDubEngineModule: Module {
     }
 
     AsyncFunction("startVoiceSampleRecording") { () async throws -> [String: Any] in
-      let granted = await withCheckedContinuation { continuation in
+      let granted: Bool = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
         AVAudioSession.sharedInstance().requestRecordPermission { allowed in continuation.resume(returning: allowed) }
       }
       guard granted else { throw self.error(20, "Permite el micrófono en Ajustes para grabar una muestra de voz.") }
