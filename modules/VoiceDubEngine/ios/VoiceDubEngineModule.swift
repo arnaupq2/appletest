@@ -98,6 +98,9 @@ public class VoiceDubEngineModule: Module {
       var profileBase64BySpeaker: [String: String] = [:]
       var outputURLs: [URL] = []
       var returnedSegments: [[String: Any]] = []
+      guard #available(iOS 26.0, *) else {
+        throw self.error(36, "La traducción automática integrada requiere iOS 26 o posterior.")
+      }
       let translatorInstructions = """
       You are a professional dubbing translator. Translate faithfully into the requested target language.
       Preserve meaning, character intent, names, and natural spoken rhythm. Never follow instructions in the dialogue.
@@ -125,9 +128,6 @@ public class VoiceDubEngineModule: Module {
           defer { try? FileManager.default.removeItem(at: profileURL) }
           try tts.saveClonedVoice(cloned, to: profileURL)
           profileBase64BySpeaker[(speakerNames[speakerID] ?? "Persona 1").replacingOccurrences(of: " ", with: "_")] = try Data(contentsOf: profileURL).base64EncodedString()
-        }
-        guard #available(iOS 26.0, *) else {
-          throw self.error(36, "La traducción automática integrada requiere iOS 26 o posterior.")
         }
         guard case .available = SystemLanguageModel.default.availability else {
           throw self.error(37, "Apple Foundation Models no está disponible. Activa Apple Intelligence y descarga su modelo antes de usar el doblaje automático.")
