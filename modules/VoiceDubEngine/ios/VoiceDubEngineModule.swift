@@ -81,8 +81,8 @@ public class VoiceDubEngineModule: Module {
       var detected: [(Int, Double, Double)] = []
       for speaker in timeline.speakers.values {
         for segment in speaker.finalizedSegments {
-          let segmentStart: Double = segment.startTime
-          let segmentEnd: Double = segment.endTime
+          let segmentStart = Double(segment.startTime)
+          let segmentEnd = Double(segment.endTime)
           let segmentDuration = segmentEnd - segmentStart
           if segmentDuration >= 0.75 {
             detected.append((speaker.index, segmentStart, segmentEnd))
