@@ -8,6 +8,7 @@ import FluidAudio
 public class VoiceDubEngineModule: Module {
   private var managers: [String: PocketTtsManager] = [:]
   private var player: AVAudioPlayer?
+  private var queuePlayer: AVQueuePlayer?
   private var recorder: AVAudioRecorder?
   private var activeRecordingURL: URL?
   private let workDirectory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
@@ -122,7 +123,7 @@ public class VoiceDubEngineModule: Module {
           let profileURL = self.workDirectory.appendingPathComponent(UUID().uuidString + ".voice")
           defer { try? FileManager.default.removeItem(at: profileURL) }
           try tts.saveClonedVoice(cloned, to: profileURL)
-          profileBase64BySpeaker["Persona_\(speakerNames[speakerID] ?? "Persona 1")"] = try Data(contentsOf: profileURL).base64EncodedString()
+          profileBase64BySpeaker[(speakerNames[speakerID] ?? "Persona 1").replacingOccurrences(of: " ", with: "_")] = try Data(contentsOf: profileURL).base64EncodedString()
         }
         guard #available(iOS 26.0, *) else {
           throw self.error(36, "La traducción automática integrada requiere iOS 26 o posterior.")
