@@ -46,38 +46,45 @@ jobs:
             exit 1
           fi
           echo "Both local Expo modules are present."
+
       - name: Install dependencies
         run: npm install
+
       - name: Generate iOS project
         run: npx expo prebuild --platform ios --clean
-      - name: Install CocoaPods
-        run: cd ios && pod install
-      - name: Diagnose Expo native module autolinking
+
+      - name: Diagnose and install CocoaPods
         run: |
           set -euo pipefail
-          echo "--- Effective Expo config ---"
-          npx expo config --type public
-          echo "--- Expo autolinking resolution (Apple) ---"
-          npx expo-modules-autolinking resolve --platform apple || true
-          echo "--- Local module config files ---"
-          find modules -maxdepth 4 -type f -print | sort
+
+          echo "=== Generated Podfile ==="
+          cat ios/Podfile
+
+          echo "=== Autolinking resolution ==="
+          npx expo-modules-autolinking resolve --platform apple
+
+          echo "=== Install CocoaPods with verbose output ==="
+          cd ios
+          pod install --verbose
+
       - name: Verify native modules are linked into iOS
         run: |
           set -euo pipefail
-          if [ ! -f "ios/Pods/Local Podspecs/AppleFoundationTranslator.podspec.json" ]; then
-            echo "ERROR: AppleFoundationTranslator no aparece en CocoaPods. Revisa la salida de 'Diagnose Expo native module autolinking' y que app.json incluya expo.autolinking.nativeModulesDir='./modules'."
-            echo "--- CocoaPods local podspecs ---"
-            find "ios/Pods/Local Podspecs" -maxdepth 1 -type f -print | sort || true
+
+          echo "=== CocoaPods local podspecs ==="
+          find "ios/Pods/Local Podspecs" -maxdepth 1 -type f -print | sort
+
+          test -f "ios/Pods/Local Podspecs/AppleFoundationTranslator.podspec.json" || {
+            echo "::error::AppleFoundationTranslator no aparece en CocoaPods."
             exit 1
-          fi
-          if [ ! -f "ios/Pods/Local Podspecs/VoiceCache.podspec.json" ]; then
-            echo "ERROR: VoiceCache no aparece en CocoaPods. Revisa la salida de 'Diagnose Expo native module autolinking'."
-            echo "--- CocoaPods local podspecs ---"
-            find "ios/Pods/Local Podspecs" -maxdepth 1 -type f -print | sort || true
+          }
+
+          test -f "ios/Pods/Local Podspecs/VoiceCache.podspec.json" || {
+            echo "::error::VoiceCache no aparece en CocoaPods."
             exit 1
-          fi
-          grep -R "AppleFoundationTranslatorModule" "ios/Pods/Target Support Files/Pods-VoiceDubAI" 2>/dev/null || true
-          echo "AppleFoundationTranslator y VoiceCache están presentes en CocoaPods."
+          }
+
+          echo "Ambos módulos están presentes en CocoaPods."
       - name: Build unsigned app
         run: |
           xcodebuild \
