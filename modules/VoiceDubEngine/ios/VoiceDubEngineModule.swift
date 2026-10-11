@@ -8,6 +8,8 @@ import FluidAudio
 public class VoiceDubEngineModule: Module {
   private var managers: [String: PocketTtsManager] = [:]
   private var player: AVAudioPlayer?
+  private var recorder: AVAudioRecorder?
+  private var activeRecordingURL: URL?
   private let workDirectory: URL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
     .appendingPathComponent("VoiceDubAI/VoiceEngine", isDirectory: true)
 
@@ -21,6 +23,48 @@ public class VoiceDubEngineModule: Module {
         "supportedLanguages": ["Spanish", "German", "English", "French", "Italian", "Portuguese"],
         "note": "Voice cloning requires a clean 1–30 second audio sample."
       ]
+    }
+
+    AsyncFunction("startVoiceSampleRecording") { () async throws -> [String: Any] in
+      let granted = await withCheckedContinuation { continuation in
+        AVAudioSession.sharedInstance().requestRecordPermission { allowed in continuation.resume(returning: allowed) }
+      }
+      guard granted else { throw self.error(20, "Permite el micrófono en Ajustes para grabar una muestra de voz.") }
+      let session = AVAudioSession.sharedInstance()
+      try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+      try session.setActive(true)
+      let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("VoiceDubAI/VoiceSamples", isDirectory: true)
+      try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+      let url = folder.appendingPathComponent(UUID().uuidString + ".m4a")
+      let settings: [String: Any] = [
+        AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
+        AVSampleRateKey: 44_100,
+        AVNumberOfChannelsKey: 1,
+        AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
+      ]
+      let audioRecorder = try AVAudioRecorder(url: url, settings: settings)
+      guard audioRecorder.prepareToRecord(), audioRecorder.record() else {
+        throw self.error(21, "No se pudo iniciar la grabación de la muestra.")
+      }
+      self.recorder = audioRecorder
+      self.activeRecordingURL = url
+      return ["recording": true, "uri": url.absoluteString]
+    }
+
+    AsyncFunction("stopVoiceSampleRecording") { () async throws -> String in
+      guard let audioRecorder = self.recorder, let url = self.activeRecordingURL else {
+        throw self.error(22, "No hay ninguna muestra de voz grabándose.")
+      }
+      audioRecorder.stop()
+      self.recorder = nil
+      self.activeRecordingURL = nil
+      let duration = audioRecorder.currentTime
+      guard duration >= 1 else {
+        try? FileManager.default.removeItem(at: url)
+        throw self.error(23, "Graba al menos 1 segundo; lo recomendable son entre 5 y 15 segundos de una sola persona.")
+      }
+      return url.absoluteString
     }
 
     AsyncFunction("cloneVoiceFromFile") { (audioUri: String) async throws -> [String: Any] in
@@ -85,7 +129,15 @@ public class VoiceDubEngineModule: Module {
   private func manager(for language: String) async throws -> PocketTtsManager {
     let key = normalizedLanguage(language)
     if let existing = managers[key] { return existing }
-    let manager = PocketTtsManager(language: pocketLanguage(key))
+    let manager: PocketTtsManager
+    switch key {
+    case "German": manager = PocketTtsManager(language: .german)
+    case "French": manager = PocketTtsManager(language: .french24L)
+    case "Italian": manager = PocketTtsManager(language: .italian)
+    case "Portuguese": manager = PocketTtsManager(language: .portuguese)
+    case "English": manager = PocketTtsManager(language: .english)
+    default: manager = PocketTtsManager(language: .spanish)
+    }
     try await manager.initialize()
     managers[key] = manager
     return manager
@@ -99,17 +151,6 @@ public class VoiceDubEngineModule: Module {
     if lower.contains("portuguese") || lower == "pt" || lower.hasPrefix("pt-") { return "Portuguese" }
     if lower.contains("english") || lower == "en" || lower.hasPrefix("en-") { return "English" }
     return "Spanish"
-  }
-
-  private func pocketLanguage(_ language: String) -> PocketTtsLanguage {
-    switch language {
-    case "German": return .german
-    case "French": return .french24L
-    case "Italian": return .italian
-    case "Portuguese": return .portuguese
-    case "English": return .english
-    default: return .spanish
-    }
   }
 
   private func fileURL(from value: String) -> URL {
