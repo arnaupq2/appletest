@@ -1,0 +1,31 @@
+{
+  "name": "voice-dub-ai",
+  "version": "3.0.2",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "prebuild:ios": "expo prebuild --platform ios",
+    "check": "expo-doctor"
+  },
+  "dependencies": {
+    "expo": "~54.0.0",
+    "expo-blur": "~15.0.8",
+    "expo-speech": "~14.0.7",
+    "expo-speech-recognition": "^3.0.1",
+    "expo-status-bar": "~3.0.9",
+    "expo-modules-core": "~3.0.0",
+    "llama.rn": "^0.10.0",
+    "react": "19.1.0",
+    "react-native": "0.81.4",
+    "react-native-fs": "^2.20.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2"
+  },
+  "expo": {
+    "autolinking": {
+      "nativeModulesDir": "./modules"
+    }
+  }
+}

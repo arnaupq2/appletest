@@ -1,0 +1,15 @@
+Required local Expo modules (all files must be committed):
+
+AppleFoundationTranslator/
+  package.json
+  index.js
+  expo-module.config.json
+  ios/AppleFoundationTranslatorModule.swift
+  ios/AppleFoundationTranslator.podspec
+
+VoiceCache/
+  package.json
+  index.js
+  expo-module.config.json
+  ios/VoiceCacheModule.swift
+  ios/VoiceCache.podspec

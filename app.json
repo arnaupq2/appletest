@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "VoiceDubAI",
+    "slug": "voice-dub-ai",
+    "version": "3.0.2",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.voicedubai.translator",
+      "deploymentTarget": "26.0",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "VoiceDubAI necesita el micrófono para escuchar diálogos y traducirlos.",
+        "NSSpeechRecognitionUsageDescription": "VoiceDubAI convierte el diálogo hablado en texto para traducirlo localmente.",
+        "UIFileSharingEnabled": false,
+        "LSSupportsOpeningDocumentsInPlace": false
+      },
+      "buildNumber": "5"
+    },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "VoiceDubAI necesita el micrófono para traducir diálogos.",
+          "speechRecognitionPermission": "VoiceDubAI necesita reconocimiento de voz para detectar el diálogo."
+        }
+      ],
+      [
+        "llama.rn",
+        {
+          "enableEntitlements": true,
+          "entitlementsProfile": "production",
+          "forceCxx20": true,
+          "enableOpenCL": false
+        }
+      ]
+    ],
+    "experiments": {
+      "autolinkingModuleResolution": true
+    },
+    "extra": {
+      "modelName": "Qwen3-0.6B Q4_K_M",
+      "modelUrl": "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf?download=true",
+      "voiceCacheTtlMinutes": 50,
+      "voiceCacheMaxMB": 20
+    },
+    "autolinking": {
+      "nativeModulesDir": "./modules"
+    }
+  }
+}

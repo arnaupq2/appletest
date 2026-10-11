@@ -1,0 +1,6 @@
+node_modules
+ios
+build
+.expo
+*.ipa
+*.app

@@ -1,0 +1,103 @@
+name: Build VoiceDubAI iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify complete local native modules
+        run: |
+          set -uo pipefail
+          required_files=(
+            "modules/AppleFoundationTranslator/package.json"
+            "modules/AppleFoundationTranslator/index.js"
+            "modules/AppleFoundationTranslator/expo-module.config.json"
+            "modules/AppleFoundationTranslator/ios/AppleFoundationTranslatorModule.swift"
+            "modules/AppleFoundationTranslator/ios/AppleFoundationTranslator.podspec"
+            "modules/VoiceCache/package.json"
+            "modules/VoiceCache/index.js"
+            "modules/VoiceCache/expo-module.config.json"
+            "modules/VoiceCache/ios/VoiceCacheModule.swift"
+            "modules/VoiceCache/ios/VoiceCache.podspec"
+          )
+          missing=0
+          for file in "${required_files[@]}"; do
+            if [ -f "$file" ]; then
+              echo "OK: $file"
+            else
+              echo "::error title=Missing repository file::$file is missing. Upload this file at the exact path from the ZIP."
+              missing=1
+            fi
+          done
+          echo "--- Current repository files under modules/ ---"
+          find modules -maxdepth 5 -type f -print | sort || true
+          if [ "$missing" -ne 0 ]; then
+            echo "The repository is missing required module files. Make sure the ZIP contents were uploaded to the repository root, not just the ZIP itself."
+            exit 1
+          fi
+          echo "Both local Expo modules are present."
+      - name: Install dependencies
+        run: npm install
+      - name: Generate iOS project
+        run: npx expo prebuild --platform ios --clean
+      - name: Install CocoaPods
+        run: cd ios && pod install
+      - name: Diagnose Expo native module autolinking
+        run: |
+          set -euo pipefail
+          echo "--- Effective Expo config ---"
+          npx expo config --type public
+          echo "--- Expo autolinking resolution (Apple) ---"
+          npx expo-modules-autolinking resolve --platform apple || true
+          echo "--- Local module config files ---"
+          find modules -maxdepth 4 -type f -print | sort
+      - name: Verify native modules are linked into iOS
+        run: |
+          set -euo pipefail
+          if [ ! -f "ios/Pods/Local Podspecs/AppleFoundationTranslator.podspec.json" ]; then
+            echo "ERROR: AppleFoundationTranslator no aparece en CocoaPods. Revisa la salida de 'Diagnose Expo native module autolinking' y que app.json incluya expo.autolinking.nativeModulesDir='./modules'."
+            echo "--- CocoaPods local podspecs ---"
+            find "ios/Pods/Local Podspecs" -maxdepth 1 -type f -print | sort || true
+            exit 1
+          fi
+          if [ ! -f "ios/Pods/Local Podspecs/VoiceCache.podspec.json" ]; then
+            echo "ERROR: VoiceCache no aparece en CocoaPods. Revisa la salida de 'Diagnose Expo native module autolinking'."
+            echo "--- CocoaPods local podspecs ---"
+            find "ios/Pods/Local Podspecs" -maxdepth 1 -type f -print | sort || true
+            exit 1
+          fi
+          grep -R "AppleFoundationTranslatorModule" "ios/Pods/Target Support Files/Pods-VoiceDubAI" 2>/dev/null || true
+          echo "AppleFoundationTranslator y VoiceCache están presentes en CocoaPods."
+      - name: Build unsigned app
+        run: |
+          xcodebuild \
+            -workspace ios/VoiceDubAI.xcworkspace \
+            -scheme VoiceDubAI \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=\"\" \
+            build
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/VoiceDubAI.app Payload/
+          /usr/bin/zip -qry VoiceDubAI-AppleGlass-unsigned.ipa Payload
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VoiceDubAI-AppleGlass-unsigned-ipa
+          path: VoiceDubAI-AppleGlass-unsigned.ipa
+          retention-days: 7
