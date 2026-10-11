@@ -16,7 +16,7 @@
         "UIFileSharingEnabled": false,
         "LSSupportsOpeningDocumentsInPlace": false
       },
-      "buildNumber": "5"
+      "buildNumber": "6"
     },
     "plugins": [
       "./plugins/with-fluid-audio",
