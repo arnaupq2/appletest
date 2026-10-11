@@ -1,6 +1,7 @@
 import ExpoModulesCore
 import Foundation
 import AVFoundation
+import FoundationModels
 import FluidAudio
 
 /// Local voice cloning and speech synthesis. Model files are downloaded by FluidAudio
@@ -86,7 +87,7 @@ public class VoiceDubEngineModule: Module {
 
       let models = try await AsrModels.downloadAndLoad(version: .v3)
       let asr = AsrManager(config: .default)
-      try await asr.configure(models: models)
+      try await asr.loadModels(models)
       let voiceLanguage = self.normalizedLanguage(targetLanguage)
       let tts = try await self.manager(for: voiceLanguage)
       var speakerNames: [Int: String] = [:]
