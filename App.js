@@ -248,7 +248,7 @@ function AppScreen() {
 
       <GlassCard style={s.voiceCard} intensity={35}>
         <View style={s.rowBetween}><Text style={s.sectionTitle}>Voces de la escena</Text><View style={s.soonPill}><Text style={s.soonText}>EXPERIMENTAL</Text></View></View>
-        <Text style={s.voiceBody}>Caché temporal preparada: máximo 50 minutos y 20 MB. Se limpia al caducar o si supera el límite.</Text>
+        <Text style={s.voiceBody}>Caché temporal: cada perfil caduca tras 50 minutos sin uso. Si alcanza 20 MB, se elimina primero el perfil menos reciente.</Text>
         <View style={s.cacheRow}><Text style={s.cacheLabel}>Caché actual</Text><Text style={s.cacheValue}>{(voiceCache.bytes / (1024 * 1024)).toFixed(1)} MB · {voiceCache.files} archivos</Text></View>
         <Text style={s.footnote}>La clonación real y el cambio automático de timbre por interlocutor aún necesitan un modelo de síntesis y detección de hablantes específico. Por ahora, la reproducción usa las voces de iOS; no se presenta como una réplica del actor.</Text>
         <Pressable style={s.clearCacheButton} onPress={async () => { try { await VoiceCache.clear(); await refreshVoiceCache(); } catch (_) {} }}><Text style={s.clearCacheText}>Vaciar caché de voces</Text></Pressable>
