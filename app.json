@@ -19,6 +19,7 @@
       "buildNumber": "5"
     },
     "plugins": [
+      "./plugins/with-fluid-audio",
       [
         "expo-build-properties",
         {
