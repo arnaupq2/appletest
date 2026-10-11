@@ -78,11 +78,18 @@ public class VoiceDubEngineModule: Module {
       guard samples.count > 16_000 else { throw self.error(34, "No se detectó suficiente audio para procesar.") }
       let diarizer = try await LSEENDDiarizer(variant: .dihard3)
       let timeline = try diarizer.processComplete(samples, sourceSampleRate: 16_000)
-      let detected = timeline.speakers.values.flatMap { speaker in
-        speaker.finalizedSegments.map { segment in
-          (speaker.index, segment.startTime, segment.endTime)
+      var detected: [(Int, Double, Double)] = []
+      for speaker in timeline.speakers.values {
+        for segment in speaker.finalizedSegments {
+          let segmentStart: Double = segment.startTime
+          let segmentEnd: Double = segment.endTime
+          let segmentDuration = segmentEnd - segmentStart
+          if segmentDuration >= 0.75 {
+            detected.append((speaker.index, segmentStart, segmentEnd))
+          }
         }
-      }.filter { $0.2 > $0.1 && $0.2 - $0.1 >= 0.75 }.sorted { $0.1 < $1.1 }
+      }
+      detected.sort { left, right in left.1 < right.1 }
       guard !detected.isEmpty else { throw self.error(35, "No se detectaron voces claras. Acerca el iPhone al altavoz y reduce el ruido ambiente.") }
 
       let models = try await AsrModels.downloadAndLoad(version: .v3)
