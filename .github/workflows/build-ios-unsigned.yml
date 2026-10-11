@@ -136,6 +136,7 @@ jobs:
           # so the complete FluidAudio target still compiles under CocoaPods.
           file="ios/Pods/FluidAudio/Sources/FluidAudio/TTS/LuxTts/G2p/LuxTtsG2p.swift"
           if [ -f "$file" ]; then
+            chmod u+w "$file"
             python3 - "$file" <<'PY'
           import pathlib, sys
           path = pathlib.Path(sys.argv[1])
