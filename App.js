@@ -330,8 +330,8 @@ function AppScreen() {
       <Text style={s.subtitle}>Traduce texto y diálogos directamente en tu iPhone.</Text>
 
       <View style={s.modePill}>
-        <Pressable onPress={() => { if (!listening) setMode('text'); }} style={[s.modeItem, mode === 'text' && s.modeItemActive]}><Text style={[s.modeItemText, mode === 'text' && s.modeItemTextActive]}>文  Texto</Text></Pressable>
-        <Pressable onPress={() => { if (!listening) setMode('movie'); }} style={[s.modeItem, mode === 'movie' && s.modeItemActive]}><Text style={[s.modeItemText, mode === 'movie' && s.modeItemTextActive]}>◉  Películas</Text></Pressable>
+        <Pressable onPress={() => { if (!listening && !movieCapturing && !movieProcessing) setMode('text'); }} style={[s.modeItem, mode === 'text' && s.modeItemActive]}><Text style={[s.modeItemText, mode === 'text' && s.modeItemTextActive]}>文  Texto</Text></Pressable>
+        <Pressable onPress={() => { if (!listening && !movieCapturing && !movieProcessing) setMode('movie'); }} style={[s.modeItem, mode === 'movie' && s.modeItemActive]}><Text style={[s.modeItemText, mode === 'movie' && s.modeItemTextActive]}>◉  Películas</Text></Pressable>
       </View>
 
       <GlassCard style={s.languageCard}>
@@ -383,7 +383,7 @@ function AppScreen() {
       <GlassCard style={s.voiceCard} intensity={35}>
         <View style={s.rowBetween}><Text style={s.sectionTitle}>Voces de la escena</Text><View style={s.soonPill}><Text style={s.soonText}>EXPERIMENTAL</Text></View></View>
         <Text style={s.voiceBody}>Graba una muestra limpia de una sola persona (ideal: 5–15 segundos). PocketTTS crea un perfil local y puede generar traducciones con un timbre parecido. No grabes varias voces a la vez.</Text>
-        <Pressable disabled={voiceProcessing} style={[s.primaryButton, (voiceProcessing || !VoiceDubEngine) && s.disabled]} onPress={voiceRecording ? finishVoiceRecordingAndClone : startVoiceRecording}>
+        <Pressable disabled={voiceProcessing || movieCapturing || movieProcessing} style={[s.primaryButton, (voiceProcessing || movieCapturing || movieProcessing || !VoiceDubEngine) && s.disabled]} onPress={voiceRecording ? finishVoiceRecordingAndClone : startVoiceRecording}>
           {voiceProcessing ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryText}>{voiceRecording ? '■  Detener y clonar Persona 1' : '●  Grabar muestra de Persona 1'}</Text>}
         </Pressable>
         {voiceRecording && <Text style={s.footnote}>Grabando… toca el botón para detener y crear el perfil.</Text>}
