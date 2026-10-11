@@ -94,7 +94,7 @@ public class VoiceDubEngineModule: Module {
       for item in detected {
         if speakerNames[item.0] == nil { speakerNames[item.0] = "Persona \(speakerNames.count + 1)" }
       }
-      var voiceDataBySpeaker: [Int: Data] = [:]
+      var voiceDataBySpeaker: [Int: PocketTtsVoiceData] = [:]
       var profileBase64BySpeaker: [String: String] = [:]
       var outputURLs: [URL] = []
       var returnedSegments: [[String: Any]] = []
