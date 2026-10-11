@@ -14,10 +14,14 @@ import { initLlama } from 'llama.rn';
 // If autolinking fails, show the interface and report the missing capability instead of a white screen.
 const AppleTranslator = requireOptionalNativeModule('AppleFoundationTranslator');
 const NativeVoiceCache = requireOptionalNativeModule('VoiceCache');
+const VoiceDubEngine = requireOptionalNativeModule('VoiceDubEngine');
 const VoiceCache = NativeVoiceCache || {
   getStatus: async () => ({ files: 0, bytes: 0 }),
   cleanup: async () => ({ files: 0, bytes: 0 }),
-  clear: async () => ({ files: 0, bytes: 0 })
+  clear: async () => ({ files: 0, bytes: 0 }),
+  storeVoiceAsset: async () => ({ files: 0, bytes: 0 }),
+  getVoiceAsset: async () => null,
+  deleteVoiceAsset: async () => ({ files: 0, bytes: 0 })
 };
 const MODEL_URL = 'https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf?download=true';
 const MODEL_SHA256 = 'b0638f08417a2d3c8652760462eb5407c6e30173cf9608ad0820757a281eea0e';
@@ -92,6 +96,9 @@ function AppScreen() {
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const [voiceCache, setVoiceCache] = useState({ files: 0, bytes: 0 });
+  const [voiceRecording, setVoiceRecording] = useState(false);
+  const [voiceProcessing, setVoiceProcessing] = useState(false);
+  const [voiceProfileReady, setVoiceProfileReady] = useState(false);
   const contextRef = useRef(null);
   const busyRef = useRef(false);
   const lastFinalRef = useRef('');
@@ -111,13 +118,15 @@ function AppScreen() {
         return { available, reason: available ? 'Modelo local disponible.' : 'El framework no informa del motivo. Comprueba Apple Intelligence, idioma de Siri y descarga del modelo.' };
       })().catch(e => ({ available: false, reason: `Error comprobando Apple Foundation Models: ${String(e?.message || e)}` })),
       RNFS.exists(MODEL_PATH).catch(() => false),
-      VoiceCache.cleanup().catch(() => null)
-    ]).then(([availability, exists]) => {
+      VoiceCache.cleanup().catch(() => null),
+      VoiceCache.getVoiceAsset('Persona_1').catch(() => null)
+    ]).then(([availability, exists, _cacheCleaned, savedVoiceProfile]) => {
       if (!mountedRef.current) return;
       const available = !!availability?.available;
       setAppleAvailable(available); setAppleChecked(true); setAppleAvailabilityReason(String(availability?.reason || 'No se pudo obtener el estado del modelo.')); setModelExists(exists);
       setStatus(available ? 'Apple Foundation Models disponible · en el dispositivo' : (exists ? 'Qwen descargado · puedes cargarlo como alternativa' : 'Apple Foundation Models no disponible; puedes usar Qwen'));
-      if (!NativeVoiceCache) setError('Falta enlazar el módulo nativo VoiceCache. El nuevo workflow comprobará que modules/ está completo y que CocoaPods lo incluye antes de compilar.');
+      if (!NativeVoiceCache) setError('Falta enlazar el módulo nativo VoiceCache.');
+      setVoiceProfileReady(!!savedVoiceProfile);
       refreshVoiceCache();
     });
     return () => { mountedRef.current = false; Speech.stop(); if (contextRef.current) contextRef.current.release().catch(() => {}); };
@@ -198,6 +207,67 @@ function AppScreen() {
     } catch (e) { setError(String(e?.message || e)); setStatus('No se pudo iniciar'); }
   }
   function stopListening() { try { ExpoSpeechRecognitionModule.stop(); } catch (_) {} Speech.stop(); setListening(false); setStatus('Escucha detenida'); }
+
+  async function startVoiceRecording() {
+    try {
+      if (!VoiceDubEngine?.startVoiceSampleRecording) throw new Error('El motor VoiceDubEngine no está incluido en esta compilación de iOS. Vuelve a compilar el IPA desde la rama de pruebas.');
+      if (listening) stopListening();
+      setError('');
+      await VoiceDubEngine.startVoiceSampleRecording();
+      setVoiceRecording(true);
+      setStatus('Grabando muestra de voz. Habla una sola persona durante 5–15 segundos.');
+    } catch (e) {
+      setError(String(e?.message || e));
+      setStatus('No se pudo grabar la muestra de voz');
+    }
+  }
+
+  async function finishVoiceRecordingAndClone() {
+    try {
+      setVoiceProcessing(true);
+      setError('');
+      if (!VoiceDubEngine?.stopVoiceSampleRecording || !VoiceDubEngine?.cloneVoiceFromFile) throw new Error('Falta el motor nativo de clonación. Recompila la app desde la rama de pruebas.');
+      setVoiceRecording(false);
+      setStatus('Procesando muestra y creando el perfil de Persona 1…');
+      const audioUri = await VoiceDubEngine.stopVoiceSampleRecording();
+      const result = await VoiceDubEngine.cloneVoiceFromFile(audioUri);
+      if (!result?.profileBase64) throw new Error('El motor no ha devuelto un perfil de voz válido.');
+      const cacheResult = await VoiceCache.storeVoiceAsset('Persona_1', result.profileBase64);
+      setVoiceProfileReady(true);
+      await refreshVoiceCache();
+      setStatus('Perfil Persona 1 guardado en la caché local.');
+      if (cacheResult?.clearedForLimit) throw new Error('El perfil superaba el límite de 20 MB y no se ha podido guardar.');
+    } catch (e) {
+      setVoiceProfileReady(false);
+      setError(String(e?.message || e));
+      setStatus('No se pudo crear el perfil de voz');
+    } finally {
+      setVoiceProcessing(false);
+    }
+  }
+
+  async function playWithClonedVoice() {
+    try {
+      if (!translatedText.trim()) throw new Error('Primero traduce un texto.');
+      if (!VoiceDubEngine?.synthesizeWithVoice) throw new Error('El motor PocketTTS no está incluido en este IPA. Recompila desde la rama de pruebas.');
+      setVoiceProcessing(true);
+      setError('');
+      setStatus('Generando traducción con la voz de Persona 1…');
+      const profile = await VoiceCache.getVoiceAsset('Persona_1');
+      if (!profile) {
+        setVoiceProfileReady(false);
+        throw new Error('El perfil ha caducado o fue expulsado de la caché. Graba otra muestra de voz.');
+      }
+      const result = await VoiceDubEngine.synthesizeWithVoice(translatedText, profile, targetLanguage);
+      await refreshVoiceCache();
+      setStatus(result?.played ? 'Reproduciendo traducción con la voz clonada de Persona 1.' : 'Traducción sintetizada.');
+    } catch (e) {
+      setError(String(e?.message || e));
+      setStatus('No se pudo sintetizar con la voz clonada');
+    } finally {
+      setVoiceProcessing(false);
+    }
+  }
   const sourceLabel = LANGUAGES.find(l => l.value === sourceLanguage)?.label || 'Detectar idioma';
   const targetLabel = LANGUAGES.find(l => l.value === targetLanguage)?.label || targetLanguage;
 
@@ -248,10 +318,17 @@ function AppScreen() {
 
       <GlassCard style={s.voiceCard} intensity={35}>
         <View style={s.rowBetween}><Text style={s.sectionTitle}>Voces de la escena</Text><View style={s.soonPill}><Text style={s.soonText}>EXPERIMENTAL</Text></View></View>
-        <Text style={s.voiceBody}>Caché temporal: cada perfil caduca tras 50 minutos sin uso. Si alcanza 20 MB, se elimina primero el perfil menos reciente.</Text>
+        <Text style={s.voiceBody}>Graba una muestra limpia de una sola persona (ideal: 5–15 segundos). PocketTTS crea un perfil local y puede generar traducciones con un timbre parecido. No grabes varias voces a la vez.</Text>
+        <Pressable disabled={voiceProcessing} style={[s.primaryButton, (voiceProcessing || !VoiceDubEngine) && s.disabled]} onPress={voiceRecording ? finishVoiceRecordingAndClone : startVoiceRecording}>
+          {voiceProcessing ? <ActivityIndicator color="#fff" /> : <Text style={s.primaryText}>{voiceRecording ? '■  Detener y clonar Persona 1' : '●  Grabar muestra de Persona 1'}</Text>}
+        </Pressable>
+        {voiceRecording && <Text style={s.footnote}>Grabando… toca el botón para detener y crear el perfil.</Text>}
+        <View style={s.cacheRow}><Text style={s.cacheLabel}>Perfil Persona 1</Text><Text style={s.cacheValue}>{voiceProfileReady ? 'Guardado en caché' : 'Sin muestra'}</Text></View>
+        <Text style={s.voiceBody}>Caché: caducidad tras 50 minutos sin uso; máximo 20 MB. Los perfiles menos recientes se eliminan primero. El motor de voz descarga sus modelos la primera vez que se utiliza, por lo que esa primera ejecución necesita Internet.</Text>
         <View style={s.cacheRow}><Text style={s.cacheLabel}>Caché actual</Text><Text style={s.cacheValue}>{(voiceCache.bytes / (1024 * 1024)).toFixed(1)} MB · {voiceCache.files} archivos</Text></View>
-        <Text style={s.footnote}>La clonación real y el cambio automático de timbre por interlocutor aún necesitan un modelo de síntesis y detección de hablantes específico. Por ahora, la reproducción usa las voces de iOS; no se presenta como una réplica del actor.</Text>
-        <Pressable style={s.clearCacheButton} onPress={async () => { try { await VoiceCache.clear(); await refreshVoiceCache(); } catch (_) {} }}><Text style={s.clearCacheText}>Vaciar caché de voces</Text></Pressable>
+        {!!translatedText && <Pressable disabled={voiceProcessing || !voiceProfileReady} style={[s.speakButton, (voiceProcessing || !voiceProfileReady) && s.disabled]} onPress={playWithClonedVoice}><Text style={s.speakText}>▶  Reproducir traducción con Persona 1</Text></Pressable>}
+        <Text style={s.footnote}>Esta primera integración permite clonar una muestra y reutilizarla. La detección automática de múltiples interlocutores y el cambio de perfil por segmento todavía no están conectados.</Text>
+        <Pressable style={s.clearCacheButton} onPress={async () => { try { await VoiceCache.clear(); setVoiceProfileReady(false); await refreshVoiceCache(); } catch (_) {} }}><Text style={s.clearCacheText}>Vaciar caché de voces</Text></Pressable>
       </GlassCard>
 
       {!!error && <View style={s.errorBox}><Text style={s.errorText}>{error}</Text></View>}
