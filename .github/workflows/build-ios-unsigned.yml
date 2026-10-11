@@ -127,6 +127,23 @@ jobs:
           }
 
           echo "Los módulos nativos y FluidAudio están presentes en CocoaPods."
+      - name: Patch FluidAudio CocoaPods resource accessor
+        run: |
+          set -euo pipefail
+          # FluidAudio's SwiftPM manifest generates Bundle.module, but its CocoaPods
+          # podspec includes LuxTTS sources without a CocoaPods resource bundle.
+          # VoiceDubAI uses PocketTTS, not LuxTTS; patch the unused G2P resource lookup
+          # so the complete FluidAudio target still compiles under CocoaPods.
+          file="ios/Pods/FluidAudio/Sources/FluidAudio/TTS/LuxTts/G2p/LuxTtsG2p.swift"
+          if [ -f "$file" ]; then
+            python3 - "$file" <<'PY'
+          import pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          source = path.read_text()
+          path.write_text(source.replace("Bundle.module", "Bundle.main"))
+          PY
+          fi
+
       - name: Build unsigned app
         run: |
           xcodebuild \
