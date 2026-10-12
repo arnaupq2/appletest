@@ -260,7 +260,10 @@ function AppScreen() {
     // Automatic speech is the dubbed output. Headphones are recommended to avoid
     // the translated voice being picked up again by the microphone.
     Speech.stop();
-    Speech.speak(output, { language: voice?.speech || 'es-ES', rate: 0.96, pitch: 1.0 });
+    await new Promise(resolve => Speech.speak(output, {
+      language: voice?.speech || 'es-ES', rate: 0.96, pitch: 1.0,
+      onDone: resolve, onStopped: resolve, onError: resolve
+    }));
   }
 
   function enqueueMovieTranslation(text) {
@@ -276,7 +279,6 @@ function AppScreen() {
         }
       } finally {
         movieQueueRunningRef.current = false;
-        if (movieQueueRef.current.length && mountedRef.current && movieCapturing) enqueueMovieTranslation(movieQueueRef.current.shift());
       }
     })();
   }
