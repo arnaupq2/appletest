@@ -209,7 +209,7 @@ function AppScreen() {
     setSourceText(text);
     if (event.isFinal && text !== lastFinalRef.current) { lastFinalRef.current = text; translate(text, true); }
   });
-  useSpeechRecognitionEvent('error', event => { setListening(false); setStatus('No se pudo reconocer el audio'); setError(`${event.message || event.error || 'Error de reconocimiento'}. El modo offline depende del idioma y de iOS.`); });
+  useSpeechRecognitionEvent('error', event => { setListening(false); if (mode === 'movie') setMovieCapturing(false); setStatus('No se pudo reconocer el audio'); setError(`${event.message || event.error || 'Error de reconocimiento'}. El modo offline depende del idioma y de iOS; comprueba que el idioma esté descargado y sea compatible.`); });
 
   async function startListening() {
     try {
