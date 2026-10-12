@@ -109,6 +109,9 @@ function AppScreen() {
   const movieLastFinalRef = useRef('');
   const movieQueueRef = useRef([]);
   const movieQueueRunningRef = useRef(false);
+  const movieCaptureRequestedRef = useRef(false);
+  const movieRestartTimerRef = useRef(null);
+  const movieSpeechOptionsRef = useRef(null);
   const mountedRef = useRef(true);
 
   const refreshVoiceCache = useCallback(async () => {
@@ -194,11 +197,42 @@ function AppScreen() {
     finally { busyRef.current = false; setBusy(false); }
   }, [appleAvailable, sourceLanguage, targetLanguage]);
 
-  useSpeechRecognitionEvent('start', () => { if (mode !== 'movie') setListening(true); setStatus(mode === 'movie' ? 'Escuchando diálogo de película…' : 'Escuchando diálogo…'); setError(''); });
-  useSpeechRecognitionEvent('end', () => { setListening(false); if (movieCapturing) { setMovieCapturing(false); setStatus('El reconocimiento se ha detenido. Vuelve a tocar para reanudar.'); } else if (!busyRef.current) setStatus('Escucha detenida'); });
+  function scheduleMovieRecognitionRestart(delay = 700) {
+    if (!movieCaptureRequestedRef.current || movieRestartTimerRef.current) return;
+    movieRestartTimerRef.current = setTimeout(() => {
+      movieRestartTimerRef.current = null;
+      if (!movieCaptureRequestedRef.current || !movieSpeechOptionsRef.current) return;
+      try {
+        ExpoSpeechRecognitionModule.start(movieSpeechOptionsRef.current);
+      } catch (_) {
+        scheduleMovieRecognitionRestart(1500);
+      }
+    }, delay);
+  }
+
+  useSpeechRecognitionEvent('start', () => {
+    if (movieCaptureRequestedRef.current) {
+      setMovieCapturing(true);
+      setStatus('Película activa: escuchando diálogo en directo…');
+    } else if (mode !== 'movie') {
+      setListening(true);
+      setStatus('Escuchando diálogo…');
+    }
+    setError('');
+  });
+  useSpeechRecognitionEvent('end', () => {
+    setListening(false);
+    if (movieCaptureRequestedRef.current) {
+      setMovieCapturing(true);
+      setStatus('Reanudando escucha de la película…');
+      scheduleMovieRecognitionRestart(700);
+    } else if (!busyRef.current) {
+      setStatus('Escucha detenida');
+    }
+  });
   useSpeechRecognitionEvent('result', event => {
     const text = event.results?.[0]?.transcript?.trim() || ''; if (!text) return;
-    if (mode === 'movie' && movieCapturing) {
+    if (mode === 'movie' && movieCaptureRequestedRef.current) {
       setSourceText(text);
       if (event.isFinal && text !== movieLastFinalRef.current) {
         movieLastFinalRef.current = text;
@@ -209,7 +243,27 @@ function AppScreen() {
     setSourceText(text);
     if (event.isFinal && text !== lastFinalRef.current) { lastFinalRef.current = text; translate(text, true); }
   });
-  useSpeechRecognitionEvent('error', event => { setListening(false); if (mode === 'movie') setMovieCapturing(false); setStatus('No se pudo reconocer el audio'); setError(`${event.message || event.error || 'Error de reconocimiento'}. El modo offline depende del idioma y de iOS; comprueba que el idioma esté descargado y sea compatible.`); });
+  useSpeechRecognitionEvent('error', event => {
+    setListening(false);
+    const code = String(event.error || '').toLowerCase();
+    const message = String(event.message || event.error || 'Error de reconocimiento');
+    if (movieCaptureRequestedRef.current) {
+      if (['not-allowed', 'service-not-allowed', 'language-not-supported', 'language-unavailable', 'audio-capture'].includes(code)) {
+        movieCaptureRequestedRef.current = false;
+        setMovieCapturing(false);
+        setStatus('No se pudo reconocer el audio');
+        setError(`${message}. Comprueba los permisos del micrófono y que el idioma elegido sea compatible con el reconocimiento de iOS.`);
+      } else {
+        setMovieCapturing(true);
+        setStatus('Recuperando el reconocimiento de voz…');
+        setError(`${message}. Intentando reanudar la escucha automáticamente.`);
+        scheduleMovieRecognitionRestart(1200);
+      }
+      return;
+    }
+    setStatus('No se pudo reconocer el audio');
+    setError(`${message}. Comprueba que el idioma esté disponible en iOS.`);
+  });
 
   async function startListening() {
     try {
@@ -272,7 +326,7 @@ function AppScreen() {
     movieQueueRunningRef.current = true;
     (async () => {
       try {
-        while (movieQueueRef.current.length && mountedRef.current && movieCapturing) {
+        while (movieQueueRef.current.length && mountedRef.current && movieCaptureRequestedRef.current) {
           const next = movieQueueRef.current.shift();
           try { await translateMovieUtterance(next); }
           catch (e) { setError(String(e?.message || e)); }
@@ -295,17 +349,20 @@ function AppScreen() {
       setTranslatedText('');
       movieLastFinalRef.current = '';
       movieQueueRef.current = [];
+      movieCaptureRequestedRef.current = true;
+      if (movieRestartTimerRef.current) {
+        clearTimeout(movieRestartTimerRef.current);
+        movieRestartTimerRef.current = null;
+      }
       const selected = LANGUAGES.find(item => item.value === sourceLanguage);
       const speechLang = sourceLanguage === 'Auto' ? 'en-US' : (selected?.speech || 'en-US');
       setStatus('Iniciando escucha continua con reducción de ruido de iOS…');
-      // iOS voiceChat mode enables the system voice-processing path (noise/echo
-      // handling where supported by the route). On-device recognition avoids sending
-      // the movie's dialogue to a remote speech service.
-      ExpoSpeechRecognitionModule.start({
+      // iOS may end a speech task by itself. The end/error handlers restart it
+      // while this requested-session flag remains true.
+      movieSpeechOptionsRef.current = {
         lang: speechLang,
         interimResults: true,
         continuous: true,
-        requiresOnDeviceRecognition: true,
         addsPunctuation: true,
         iosCategory: {
           category: 'playAndRecord',
@@ -313,8 +370,9 @@ function AppScreen() {
           categoryOptions: ['defaultToSpeaker', 'allowBluetooth']
         },
         iosVoiceProcessingEnabled: true
-      });
+      };
       setMovieCapturing(true);
+      ExpoSpeechRecognitionModule.start(movieSpeechOptionsRef.current);
       setStatus('Película activa: transcribiendo y traduciendo cada frase automáticamente.');
     } catch (e) {
       setMovieCapturing(false);
@@ -324,6 +382,12 @@ function AppScreen() {
   }
 
   function stopAutomaticMovieCapture() {
+    movieCaptureRequestedRef.current = false;
+    if (movieRestartTimerRef.current) {
+      clearTimeout(movieRestartTimerRef.current);
+      movieRestartTimerRef.current = null;
+    }
+    movieSpeechOptionsRef.current = null;
     setMovieCapturing(false);
     movieQueueRef.current = [];
     try { ExpoSpeechRecognitionModule.stop(); } catch (_) {}
