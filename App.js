@@ -310,7 +310,7 @@ function AppScreen() {
         iosCategory: {
           category: 'playAndRecord',
           mode: 'voiceChat',
-          options: ['defaultToSpeaker', 'allowBluetooth']
+          categoryOptions: ['defaultToSpeaker', 'allowBluetooth']
         },
         iosVoiceProcessingEnabled: true
       });
