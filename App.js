@@ -311,7 +311,8 @@ function AppScreen() {
           category: 'playAndRecord',
           mode: 'voiceChat',
           options: ['defaultToSpeaker', 'allowBluetooth']
-        }
+        },
+        iosVoiceProcessingEnabled: true
       });
       setMovieCapturing(true);
       setStatus('Película activa: transcribiendo y traduciendo cada frase automáticamente.');
